@@ -81,7 +81,7 @@ class BNReasoner:
             added_edges.append((node, count))
         return sorted(added_edges, key=lambda x: x[1])
 
-    def marginal_distributions(self, query: List[str], evidence: Optional[Dict[str, bool]]) -> pd.DataFrame:
+    def marginal_distributions(self, query: List[str], evidence: Optional[Dict[str, bool]], ordering: List[Tuple[str, int]]) -> pd.DataFrame:
         """
         Computes the marginal distribution of the given query w.r.t. evidence.
 
@@ -90,13 +90,42 @@ class BNReasoner:
             respective truth assignments.
         :return: a pandas DataFrame containing the CPT of the given query
         """
-        pass
-
+        S = self.bn.get_all_cpts()
+        factors = {}
+        print([S[cpt] for cpt in [_ for _ in S]], "\n=======================================\n")
+        for (node, _) in ordering:
+            factor = None
+            for variable in S:
+                cpt = S[variable]
+                if node in cpt.columns:
+                    if factor is None:
+                        factor = cpt
+                        continue
+                    if len(cpt) > len(factor):
+                        tmp = copy.copy(factor)
+                        tmp_var = tmp.columns[0]
+                        factor = cpt
+                        for _, row in tmp.iterrows():
+                            truth_value = row[tmp_var]
+                            factor[factor[tmp_var] == truth_value] *= row["p"]
+                    else:
+                        for _, row in cpt.iterrows():
+                            truth_value = row[variable]
+                            factor[factor[variable] == truth_value] *= row["p"]
+            columns_to_keep = list(factor.columns)
+            columns_to_keep.remove(node)
+            columns_to_keep.remove("p")
+            print(factor)
+            summed_out_factor = pd.pivot_table(factor, index=columns_to_keep, values="p", aggfunc="sum")
+            summed_out_factor = summed_out_factor.reset_index()
+            print(summed_out_factor)
+            factors[node] = summed_out_factor
+            for variable in S:
+                if node in S[variable].columns:
+                    S[variable] = summed_out_factor
+        return factors
 
 if __name__ == "__main__":
     bifxml_path = os.getcwd() + "/testing/dog_problem.BIFXML"
     bnr = BNReasoner(bifxml_path)
-    # print(bnr.bn.get_all_cpts())
-    # pruned = bnr.pruning(["light-on", "family-out"], {"dog-out" : False})
-    # print(pruned.get_all_cpts())
-    print(bnr.min_fill())
+    print(bnr.marginal_distributions(["dog-out"], None, bnr.min_fill()))
