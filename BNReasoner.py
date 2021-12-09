@@ -53,6 +53,17 @@ class BNReasoner:
                     modified = True
         return pruned_graph
 
+    def marginal_distributions(self, query: List[str], evidence: Optional[Dict[str, bool]]) -> pd.DataFrame:
+        """
+        Computes the marginal distribution of the given query w.r.t. evidence.
+
+        :param query: List of nodes
+        :param evidence: if None, this computes the prior marginal. Otherwise, this is a dictionary of values with
+            respective truth assignments.
+        :return: a pandas DataFrame containing the CPT of the given query
+        """
+        pass
+
 
 if __name__ == "__main__":
     bifxml_path = os.getcwd() + "/testing/dog_problem.BIFXML"
