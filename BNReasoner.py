@@ -1,6 +1,7 @@
 import copy
 import os
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Optional, Tuple
+import pandas as pd
 
 from BayesNet import BayesNet
 
@@ -53,6 +54,33 @@ class BNReasoner:
                     modified = True
         return pruned_graph
 
+    def min_degree(self) -> List[Tuple[str, int]]:
+        """
+        Ordering nodes on the basis of the smallest degree.
+
+        :return: a list the variables and their degree ordered according to the heuristic
+        """
+        interaction_graph = self.bn.get_interaction_graph()
+        degrees = sorted(list(interaction_graph.degree()), key=lambda x: x[1])
+        return degrees
+
+    def min_fill(self) -> List[Tuple[str, int]]:
+        """
+        Ordering nodes on the basis where elimination leads to smallest number of edges.
+
+        :return: a list the variables and their degree ordered according to the heuristic
+        """
+        interaction_graph = self.bn.get_interaction_graph()
+        added_edges = []
+        for node in interaction_graph:
+            count = 0
+            for neighbor in interaction_graph.neighbors(node):
+                for far_neighbor in interaction_graph.neighbors(neighbor):
+                    if far_neighbor not in interaction_graph.neighbors(node):
+                        count += 1
+            added_edges.append((node, count))
+        return sorted(added_edges, key=lambda x: x[1])
+
     def marginal_distributions(self, query: List[str], evidence: Optional[Dict[str, bool]]) -> pd.DataFrame:
         """
         Computes the marginal distribution of the given query w.r.t. evidence.
@@ -68,6 +96,7 @@ class BNReasoner:
 if __name__ == "__main__":
     bifxml_path = os.getcwd() + "/testing/dog_problem.BIFXML"
     bnr = BNReasoner(bifxml_path)
-    print(bnr.bn.get_all_cpts())
-    pruned = bnr.pruning(["light-on", "family-out"], {"dog-out" : False})
-    print(pruned.get_all_cpts())
+    # print(bnr.bn.get_all_cpts())
+    # pruned = bnr.pruning(["light-on", "family-out"], {"dog-out" : False})
+    # print(pruned.get_all_cpts())
+    print(bnr.min_fill())
