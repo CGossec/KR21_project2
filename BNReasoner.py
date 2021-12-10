@@ -4,6 +4,8 @@ from typing import List, Union, Dict, Optional, Tuple
 import pandas as pd
 
 from BayesNet import BayesNet
+import networkx as nx
+import matplotlib.pyplot as plt
 
 
 class BNReasoner:
@@ -18,7 +20,49 @@ class BNReasoner:
             self.bn.load_from_bifxml(net)
         else:
             self.bn = net
+            print(net)
 
+    def determine_reach(self, reachable_nodes, seen):
+        new_reachable_nodes = list(set(reachable_nodes) - set(seen))
+        for node in new_reachable_nodes:
+            for child in self.bn.get_children(node):
+                if child not in reachable_nodes:
+                    reachable_nodes.append(child)
+            seen.append(node)
+        if list(set(reachable_nodes) - set(seen)) != []:
+            #Recursive part: Find the children of the children of the current set
+            reachable_nodes = self.determine_reach(reachable_nodes, seen)
+        return reachable_nodes
+    
+    def d_separation(self , X, Y, Z):
+        #Prune the graph
+        all_variables = (self.bn.get_all_variables())
+
+        for variable in all_variables:
+            if variable not in (X + Y +Z) and self.bn.get_children(variable) == []:
+                self.bn.del_var(variable)
+        for variable in Z:
+            children = self.bn.get_children(variable)
+            for child in children:
+                self.bn.del_edge([variable, child])
+        #Find the reachable nodes from X
+        X_reachables = []
+        for variable in X:
+            reachable_nodes = []
+            seen = []
+            reachable_nodes.extend(self.bn.get_children(variable))
+            seen.extend(variable)
+            reachable_nodes = self.determine_reach(reachable_nodes, seen)
+            X_reachables.append(reachable_nodes)
+        for x_reach in X_reachables:
+            for y in Y:
+                if y in x_reach:
+                    print(X, 'and', Y, 'are not d-separated by', Z)
+                    return False
+        print(X, 'and', Y, 'are d-separated by', Z)
+        return True
+
+<<<<<<< Updated upstream
     def pruning(self, query: List[str], evidence: Dict[str, bool]) -> BayesNet:
         """
         Given a graph G and disjoint set of nodes in the query and an evidence, return a pruned graph G' such that:
@@ -129,3 +173,16 @@ if __name__ == "__main__":
     bifxml_path = os.getcwd() + "/testing/dog_problem.BIFXML"
     bnr = BNReasoner(bifxml_path)
     print(bnr.marginal_distributions(["dog-out"], None, bnr.min_fill()))
+=======
+    # TODO: This is where your methods should go
+
+file_path = 'C:/Users/Afaan/OneDrive/Documenten/KR21_project2/testing/dog_problem.BIFXML'
+My_reasoner = BNReasoner(file_path)
+
+X = ['bowel-problem', 'family-out']
+Y = ['hear-bark']
+Z = []
+My_reasoner.bn.draw_structure()
+print(My_reasoner.d_separation(X, Y, Z))
+
+>>>>>>> Stashed changes

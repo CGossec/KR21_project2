@@ -1,8 +1,9 @@
 from typing import List, Tuple, Dict
-import networkx as nx
 import matplotlib.pyplot as plt
 from pgmpy.readwrite import XMLBIFReader
 import math
+import networkx as nx
+
 import itertools
 import pandas as pd
 from copy import deepcopy
@@ -226,3 +227,5 @@ class BayesNet:
         :param edge: Edge to be deleted (e.g. ('A', 'B')).
         """
         self.structure.remove_edge(edge[0], edge[1])
+
+
