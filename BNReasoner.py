@@ -62,7 +62,6 @@ class BNReasoner:
         print(X, 'and', Y, 'are d-separated by', Z)
         return True
 
-<<<<<<< Updated upstream
     def pruning(self, query: List[str], evidence: Dict[str, bool]) -> BayesNet:
         """
         Given a graph G and disjoint set of nodes in the query and an evidence, return a pruned graph G' such that:
@@ -173,10 +172,13 @@ if __name__ == "__main__":
     bifxml_path = os.getcwd() + "/testing/dog_problem.BIFXML"
     bnr = BNReasoner(bifxml_path)
     print(bnr.marginal_distributions(["dog-out"], None, bnr.min_fill()))
-=======
-    # TODO: This is where your methods should go
 
-file_path = 'C:/Users/Afaan/OneDrive/Documenten/KR21_project2/testing/dog_problem.BIFXML'
+#Path syntax is different, so choose the suitable one here
+file_path = os.getcwd() + "/testing/dog_problem.BIFXML"
+file_path = r'C:\\Users\\Afaan\\OneDrive\\Documenten\\KR21_project2\\testing\\dog_problem.BIFXML'
+
+# import pathlib
+# print(pathlib.Path().resolve().replace("\\","/"))
 My_reasoner = BNReasoner(file_path)
 
 X = ['bowel-problem', 'family-out']
@@ -185,4 +187,3 @@ Z = []
 My_reasoner.bn.draw_structure()
 print(My_reasoner.d_separation(X, Y, Z))
 
->>>>>>> Stashed changes
