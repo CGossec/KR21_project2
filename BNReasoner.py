@@ -33,7 +33,7 @@ class BNReasoner:
             #Recursive part: Find the children of the children of the current set
             reachable_nodes = self.determine_reach(reachable_nodes, seen)
         return reachable_nodes
-    
+
     def d_separation(self , X, Y, Z):
         #Prune the graph
         all_variables = (self.bn.get_all_variables())
@@ -86,11 +86,13 @@ class BNReasoner:
                     cpt = CPTs[variable]
                     if given not in cpt.columns:
                         continue
-                    if cpt.columns[-2] == given:
-                        continue
                     indices_to_drop = cpt[cpt[given] == (not evidence[given])].index
                     new_cpt = cpt.drop(indices_to_drop)
+                    if cpt.columns[-2] == given:
+                        pruned_graph.update_cpt(variable, new_cpt)
+                        continue
                     new_cpt = new_cpt.drop(given, axis = 1)
+                    #new_cpt["p"] = new_cpt["p"] / new_cpt["p"].sum()
                     pruned_graph.update_cpt(variable, new_cpt)
                 for child in pruned_graph.get_children(given):
                     pruned_graph.del_edge((given, child))
@@ -124,6 +126,7 @@ class BNReasoner:
             added_edges.append((node, count))
         return sorted(added_edges, key=lambda x: x[1])
 
+
     def marginal_distributions(self, query: List[str], evidence: Optional[Dict[str, bool]], ordering: List[Tuple[str, int]]) -> pd.DataFrame:
         """
         Computes the marginal distribution of the given query w.r.t. evidence.
@@ -133,6 +136,9 @@ class BNReasoner:
             respective truth assignments.
         :return: a pandas DataFrame containing the CPT of the given query
         """
+        if evidence is None:
+            evidence = {}
+        pruned_graph = self.pruning(bnr.bn.get_all_variables(), evidence=evidence)
         S = self.bn.get_all_cpts()
         factors = {}
         print([S[cpt] for cpt in [_ for _ in S]], "\n=======================================\n")
@@ -144,46 +150,37 @@ class BNReasoner:
                     if factor is None:
                         factor = cpt
                         continue
-                    if len(cpt) > len(factor):
-                        tmp = copy.copy(factor)
-                        tmp_var = tmp.columns[0]
-                        factor = cpt
-                        for _, row in tmp.iterrows():
-                            truth_value = row[tmp_var]
-                            factor[factor[tmp_var] == truth_value] *= row["p"]
-                    else:
-                        for _, row in cpt.iterrows():
-                            truth_value = row[variable]
-                            factor[factor[variable] == truth_value] *= row["p"]
+                    factor = multiply_factors(factor, cpt)
             columns_to_keep = list(factor.columns)
             columns_to_keep.remove(node)
             columns_to_keep.remove("p")
-            print(factor)
-            summed_out_factor = pd.pivot_table(factor, index=columns_to_keep, values="p", aggfunc="sum")
-            summed_out_factor = summed_out_factor.reset_index()
-            print(summed_out_factor)
+            if columns_to_keep != []:
+                summed_out_factor = pd.pivot_table(factor, index=columns_to_keep, values="p", aggfunc="sum")
+                summed_out_factor = summed_out_factor.reset_index()
+            else:
+                summed_out_factor = factor
             factors[node] = summed_out_factor
             for variable in S:
+                if S[variable].empty:
+                    continue
+                if S[variable].columns[-2] == node:
+                    S[variable] = pd.DataFrame()
+                    continue
                 if node in S[variable].columns:
                     S[variable] = summed_out_factor
         return factors
 
+def multiply_factors(cpt1: pd.DataFrame, cpt2: pd.DataFrame) -> pd.DataFrame:
+    res = cpt2 if len(cpt2) > len(cpt1) else cpt1
+    other = cpt1 if len(cpt2) > len(cpt1) else cpt2
+    for var in other.columns[:-1]:
+        for _, row in other.iterrows():
+            truth_value = row[var]
+            res.loc[res[var] == truth_value, "p"] *= row["p"]
+    return res
+
 if __name__ == "__main__":
-    bifxml_path = os.getcwd() + "/testing/dog_problem.BIFXML"
+    bifxml_path = os.getcwd() + "/testing/lecture_example2.BIFXML"
     bnr = BNReasoner(bifxml_path)
-    print(bnr.marginal_distributions(["dog-out"], None, bnr.min_fill()))
-
-#Path syntax is different, so choose the suitable one here
-file_path = os.getcwd() + "/testing/dog_problem.BIFXML"
-file_path = r'C:\\Users\\Afaan\\OneDrive\\Documenten\\KR21_project2\\testing\\dog_problem.BIFXML'
-
-# import pathlib
-# print(pathlib.Path().resolve().replace("\\","/"))
-My_reasoner = BNReasoner(file_path)
-
-X = ['bowel-problem', 'family-out']
-Y = ['hear-bark']
-Z = []
-My_reasoner.bn.draw_structure()
-print(My_reasoner.d_separation(X, Y, Z))
-
+    manual_order = [('J', 1), ('I', 2), ('Y', 3), ('X', 4), ('O', 5)]
+    print(bnr.marginal_distributions('O', None, manual_order))
