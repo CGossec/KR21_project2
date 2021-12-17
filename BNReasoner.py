@@ -88,11 +88,6 @@ class BNReasoner:
                         continue
                     indices_to_drop = cpt[cpt[given] == (not evidence[given])].index
                     new_cpt = cpt.drop(indices_to_drop)
-                    if cpt.columns[-2] == given:
-                        pruned_graph.update_cpt(variable, new_cpt)
-                        continue
-                    new_cpt = new_cpt.drop(given, axis = 1)
-                    #new_cpt["p"] = new_cpt["p"] / new_cpt["p"].sum()
                     pruned_graph.update_cpt(variable, new_cpt)
                 for child in pruned_graph.get_children(given):
                     pruned_graph.del_edge((given, child))
@@ -150,7 +145,7 @@ class BNReasoner:
                     if factor is None:
                         factor = cpt
                         continue
-                    factor = multiply_factors(factor, cpt)
+                    S[variable] = multiply_factors(factor, cpt)
             columns_to_keep = list(factor.columns)
             columns_to_keep.remove(node)
             columns_to_keep.remove("p")
@@ -167,8 +162,18 @@ class BNReasoner:
                     S[variable] = pd.DataFrame()
                     continue
                 if node in S[variable].columns:
-                    S[variable] = summed_out_factor
-        return factors
+                    S[variable] = S[variable].drop(node, axis=1)
+        return {var: self.normalize_with_evidence(sum_out_variable(factors[var], var), evidence) for var in query}
+
+    def normalize_with_evidence(self, cpt: pd.DataFrame, evidence: Dict[str, bool]) -> pd.DataFrame:
+        res = cpt.copy()
+        for var in evidence:
+            evidence_cpt = self.bn.get_cpt(var)
+            evidence_cpt = sum_out_variable(evidence_cpt, var)
+            proba_of_evidence = float(evidence_cpt[evidence_cpt[var] == evidence[var]]["p"])
+            res["p"] = res["p"] / proba_of_evidence
+        return res
+
 
 def multiply_factors(cpt1: pd.DataFrame, cpt2: pd.DataFrame) -> pd.DataFrame:
     res = cpt2 if len(cpt2) > len(cpt1) else cpt1
@@ -179,8 +184,15 @@ def multiply_factors(cpt1: pd.DataFrame, cpt2: pd.DataFrame) -> pd.DataFrame:
             res.loc[res[var] == truth_value, "p"] *= row["p"]
     return res
 
+def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
+    res = pd.DataFrame({variable: [True, False], "p": [0, 0]})
+    for _, row in cpt.iterrows():
+        res.loc[res[variable] == row[variable], "p"] += row["p"]
+    return res
+
 if __name__ == "__main__":
-    bifxml_path = os.getcwd() + "/testing/lecture_example2.BIFXML"
+    bifxml_path = os.getcwd() + "/testing/lecture_example3.BIFXML"
     bnr = BNReasoner(bifxml_path)
-    manual_order = [('J', 1), ('I', 2), ('Y', 3), ('X', 4), ('O', 5)]
-    print(bnr.marginal_distributions('O', None, manual_order))
+    print(bnr.marginal_distributions(["C"], {"A": True}, [('A', 123123), ('B', 123), ('C', 123)]))
+    #manual_order = [('J', 1), ('I', 2), ('Y', 3), ('X', 4), ('O', 5)]
+    #print(bnr.marginal_distributions('O', {"J": True}, manual_order))
