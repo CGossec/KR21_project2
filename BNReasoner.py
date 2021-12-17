@@ -1,11 +1,13 @@
 import copy
 import os
-from typing import List, Union, Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
+
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
 import pandas as pd
 
 from BayesNet import BayesNet
-import networkx as nx
-import matplotlib.pyplot as plt
 
 
 class BNReasoner:
@@ -88,6 +90,7 @@ class BNReasoner:
                         continue
                     indices_to_drop = cpt[cpt[given] == (not evidence[given])].index
                     new_cpt = cpt.drop(indices_to_drop)
+                    new_cpt = new_cpt.reset_index(drop=True)
                     pruned_graph.update_cpt(variable, new_cpt)
                 for child in pruned_graph.get_children(given):
                     pruned_graph.del_edge((given, child))
@@ -114,9 +117,12 @@ class BNReasoner:
         added_edges = []
         for node in interaction_graph:
             count = 0
-            for neighbor in interaction_graph.neighbors(node):
-                for far_neighbor in interaction_graph.neighbors(neighbor):
-                    if far_neighbor not in interaction_graph.neighbors(node):
+            neighbors = interaction_graph.neighbors(node)
+            for neighbor in neighbors:
+                for elm in neighbors:
+                    if neighbor is elm:
+                        continue
+                    if elm not in interaction_graph.neighbors(neighbor):
                         count += 1
             added_edges.append((node, count))
         return sorted(added_edges, key=lambda x: x[1])
@@ -134,6 +140,7 @@ class BNReasoner:
         if evidence is None:
             evidence = {}
         pruned_graph = self.pruning(bnr.bn.get_all_variables(), evidence=evidence)
+        print(f"Ordering: {ordering}")
         S = self.bn.get_all_cpts()
         factors = {}
         print([S[cpt] for cpt in [_ for _ in S]], "\n=======================================\n")
@@ -146,15 +153,7 @@ class BNReasoner:
                         factor = cpt
                         continue
                     S[variable] = multiply_factors(factor, cpt)
-            columns_to_keep = list(factor.columns)
-            columns_to_keep.remove(node)
-            columns_to_keep.remove("p")
-            if columns_to_keep != []:
-                summed_out_factor = pd.pivot_table(factor, index=columns_to_keep, values="p", aggfunc="sum")
-                summed_out_factor = summed_out_factor.reset_index()
-            else:
-                summed_out_factor = factor
-            factors[node] = summed_out_factor
+            factors[node] = factor
             for variable in S:
                 if S[variable].empty:
                     continue
@@ -162,37 +161,119 @@ class BNReasoner:
                     S[variable] = pd.DataFrame()
                     continue
                 if node in S[variable].columns:
-                    S[variable] = sum_out_variable(S[variable].drop(node, axis=1), variable)
-        return {var: self.normalize_with_evidence(factors[var], evidence) for var in query}
+                    S[variable] = sum_out_variable(S[variable], node)
+        return {var: self.normalize_with_evidence(factors[var], evidence, factors) for var in query}
 
-    def normalize_with_evidence(self, cpt: pd.DataFrame, evidence: Dict[str, bool]) -> pd.DataFrame:
+    def normalize_with_evidence(self, cpt: pd.DataFrame, evidence: Dict[str, bool], factors: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+        """
+        For every value in the result, we normalize according to the given evidence to reflect proper probabilities.
+
+        :param cpt: the dataframe we normalize. Modification is not done inplace.
+        :param evidence: A dictionary of the variables and their assigned truth values
+        :param factors: the factors we computed. I'm not sure whether this could be changed or not.
+        :return: A new CPT, normalized according to the evidence.
+        """
         res = cpt.copy()
         for var in evidence:
-            evidence_cpt = self.bn.get_cpt(var)
-            evidence_cpt = sum_out_variable(evidence_cpt, var)
+            evidence_cpt = factors[var]
             proba_of_evidence = float(evidence_cpt[evidence_cpt[var] == evidence[var]]["p"])
             res["p"] = res["p"] / proba_of_evidence
         return res
 
 
 def multiply_factors(cpt1: pd.DataFrame, cpt2: pd.DataFrame) -> pd.DataFrame:
-    res = cpt2 if len(cpt2) > len(cpt1) else cpt1
-    other = cpt1 if len(cpt2) > len(cpt1) else cpt2
+    """
+    Multiplies two CPTs, taking the common variables and multiplying the values where it can.
+    If no variables are in common, the algorithm won't do anything.
+    TODO: this should look at the factors already computed. Sometimes ordering is bad
+        and we create the factor for a variable after having gone through the elimination already.
+
+    :param cpt1: One of the CPTs to multiply
+    :param cpt2: The other of the CPTs to multiply
+    :return: a CPT containing the multiplication result of both CPTs
+    """
+    res = cpt2 if len(cpt2.columns) > len(cpt1.columns) else cpt1
+    other = cpt1 if len(cpt2.columns) > len(cpt1.columns) else cpt2
     for var in other.columns[:-1]:
+        if var not in res.columns:
+            continue
         for _, row in other.iterrows():
             truth_value = row[var]
             res.loc[res[var] == truth_value, "p"] *= row["p"]
     return res
 
 def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
-    res = pd.DataFrame({variable: [True, False], "p": [0, 0]})
-    for _, row in cpt.iterrows():
-        res.loc[res[variable] == row[variable], "p"] += row["p"]
+    """
+    Given a CPT, we want to remove a variable from it by summing all values opposed with said variable.
+    If the table looks like:
+        A      B      p
+    0  False False  0.015
+    1  False True   0.485
+    2  True  False  0.495
+    3  True  True   0.005
+    Then we sum out lines 0 and 2, and lines 1 and 3 to get
+        B      p
+    0  False  0.51
+    1  True   0.49
+    We summed every line where B was False, 0.015 + 0.495 = 0.51, and did similarly for B is True, disregarding
+    the value of variable A.
+
+    :param cpt: the conditional probability table that we want to simplify through a summing-out
+    :param variable: The variable that will be removed through summing out
+    :return: the new conditional probability table
+    """
+    def find_complementary_row(cpt: pd.DataFrame, entry_row: pd.Series, index_to_switch: int) -> Tuple[pd.Series, int]:
+        """
+        Featuring the most complex list comprehension I have ever written, without a doubt.
+
+        This function creates an array out of the values of the current row, excluding the probability row;
+        it then switches the value of the variable to remove, before individually checking every row of the
+        given CPT for the row that matches every value (there can only be one).
+        It returns the appropriate row, as well as the index of that row, to easily drop it in the main function.
+
+        :param cpt: the CPT through which we iterate to find the complementary value
+        :param entry_row: the row of which we want to find the complementary value
+        :param index_to_switch: the column index of the row we want to switch. In example above, this would be 0,
+            since we want to add up probabilities for switched values of A
+        :return: the complementary row and its index, or None if there were no complementaries (so the variable to sum out was given
+            as evidence)
+        """
+        complementary_values = list(entry_row)[:-1]
+        complementary_values[index_to_switch] = not complementary_values[index_to_switch]
+        row_matches_conditions = [row.all() # every condition needs to evaluate to true
+            for row in np.array( # We use numpy so can transpose
+                [cpt[cpt.columns[i]] == complementary_values[i] # Compare cpt[SOME_COLUMN] with complementary_value[SOME_COLUMN]
+                for i in range(len(complementary_values))] # for every column that we want to match
+                ).T]
+        try:
+            index = row_matches_conditions.index(True)
+            complementary_row = cpt.iloc[index]
+            return complementary_row, index
+        except:
+            return None, None
+
+    print(f"Summing out variable {variable} from \n{cpt}")
+    res = cpt.copy()
+    cols = list(res.columns)
+    var_to_remove = cols.index(variable)
+    indices_to_drop = []
+    for ii, row in res.iterrows():
+        if row[variable] == True:
+            opposite_row, index = find_complementary_row(cpt, row, var_to_remove)
+            if opposite_row is not None:
+                res.loc[ii, "p"] += opposite_row["p"]
+                indices_to_drop.append(index)
+    res = res.drop(indices_to_drop)
+    res = res.reset_index(drop=True)
+    if res.columns[-2] != variable:
+        res = res.drop(columns=[variable])
+    print(f"End result is: \n{res}\n====================================")
     return res
 
 if __name__ == "__main__":
     bifxml_path = os.getcwd() + "/testing/lecture_example2.BIFXML"
     bnr = BNReasoner(bifxml_path)
-    #print(bnr.marginal_distributions(["C"], {}, [('A', 123123), ('B', 123), ('C', 123)]))
-    manual_order = [('J', 1), ('I', 2), ('Y', 3), ('X', 4), ('O', 5)]
-    print(bnr.marginal_distributions('O', {}, manual_order))
+    bnr.bn.draw_structure()
+    #print(bnr.marginal_distributions(["C"], {"A": True}, [('A', 123123), ('B', 123), ('C', 123)]))
+    manual_order = [('I', 12), ('X', 9932), ('Y', 32485), ('J', -19244), ('O', 42)]
+    print(bnr.marginal_distributions('O', {"J": True}, bnr.min_fill()))
