@@ -122,14 +122,14 @@ class BNReasoner:
         return sorted(added_edges, key=lambda x: x[1])
 
 
-    def marginal_distributions(self, query: List[str], evidence: Optional[Dict[str, bool]], ordering: List[Tuple[str, int]]) -> pd.DataFrame:
+    def marginal_distributions(self, query: List[str], evidence: Optional[Dict[str, bool]], ordering: List[Tuple[str, int]]) -> Dict[str, pd.DataFrame]:
         """
         Computes the marginal distribution of the given query w.r.t. evidence.
 
         :param query: List of nodes
         :param evidence: if None, this computes the prior marginal. Otherwise, this is a dictionary of values with
             respective truth assignments.
-        :return: a pandas DataFrame containing the CPT of the given query
+        :return: a dictionary matching the variables of the query with their respective CPTs as pd.DataFrame
         """
         if evidence is None:
             evidence = {}
@@ -162,8 +162,8 @@ class BNReasoner:
                     S[variable] = pd.DataFrame()
                     continue
                 if node in S[variable].columns:
-                    S[variable] = S[variable].drop(node, axis=1)
-        return {var: self.normalize_with_evidence(sum_out_variable(factors[var], var), evidence) for var in query}
+                    S[variable] = sum_out_variable(S[variable].drop(node, axis=1), variable)
+        return {var: self.normalize_with_evidence(factors[var], evidence) for var in query}
 
     def normalize_with_evidence(self, cpt: pd.DataFrame, evidence: Dict[str, bool]) -> pd.DataFrame:
         res = cpt.copy()
@@ -191,8 +191,8 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
     return res
 
 if __name__ == "__main__":
-    bifxml_path = os.getcwd() + "/testing/lecture_example3.BIFXML"
+    bifxml_path = os.getcwd() + "/testing/lecture_example2.BIFXML"
     bnr = BNReasoner(bifxml_path)
-    print(bnr.marginal_distributions(["C"], {"A": True}, [('A', 123123), ('B', 123), ('C', 123)]))
-    #manual_order = [('J', 1), ('I', 2), ('Y', 3), ('X', 4), ('O', 5)]
-    #print(bnr.marginal_distributions('O', {"J": True}, manual_order))
+    #print(bnr.marginal_distributions(["C"], {}, [('A', 123123), ('B', 123), ('C', 123)]))
+    manual_order = [('J', 1), ('I', 2), ('Y', 3), ('X', 4), ('O', 5)]
+    print(bnr.marginal_distributions('O', {}, manual_order))
