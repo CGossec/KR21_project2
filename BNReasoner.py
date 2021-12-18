@@ -180,6 +180,33 @@ class BNReasoner:
             res["p"] = res["p"] / proba_of_evidence
         return res
 
+    def reduce_cpts(self):
+        cpts = self.bn.get_all_cpts()
+        evidence =  {"Winter?": True}
+        for cpt in cpts:
+            print(cpts[cpt])
+            #How to delete a row
+            #cpts[cpt] = cpts[cpt].drop(labels=0, axis=0)
+            for ev in evidence:
+                if ev in cpts[cpt]:
+                    for i in range(0, len(cpts[cpt].index)):
+                        if cpts[cpt].loc[i,ev] == (not evidence[ev]):
+                            cpts[cpt] = cpts[cpt].drop(labels=i, axis=0) 
+        return cpts
+
+    def map(self, query: List[str], variables, evidence):
+        res = {} 
+        #Reduce tables dumbass
+        pos_marg = self.marginal_distributions(query, variables, evidence) #Fix arguments
+        idx = pos_marg[pos_marg['p'].max()].index
+        for var, val in pos_marg, pos_marg.iloc[idx]:
+            if var != 'p':
+                res[var] = val
+        return res
+
+    def mpe(self, query: List[str], evidence):
+        prunned_net = self.pruning(query, evidence)
+
 
 def multiply_factors(cpt1: pd.DataFrame, cpt2: pd.DataFrame) -> pd.DataFrame:
     """
