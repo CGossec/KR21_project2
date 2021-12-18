@@ -184,13 +184,8 @@ class BNReasoner:
             res["p"] = res["p"] / proba_of_evidence
         return res
 
-    def reduce_cpts(self):
-        cpts = self.bn.get_all_cpts()
-        evidence =  {"Winter?": True}
+    def reduce_cpts(self, cpts, evidence):
         for cpt in cpts:
-            print(cpts[cpt])
-            #How to delete a row
-            #cpts[cpt] = cpts[cpt].drop(labels=0, axis=0)
             for ev in evidence:
                 if ev in cpts[cpt]:
                     for i in range(0, len(cpts[cpt].index)):
@@ -198,14 +193,16 @@ class BNReasoner:
                             cpts[cpt] = cpts[cpt].drop(labels=i, axis=0) 
         return cpts
 
-    def map(self, query: List[str], variables, evidence):
-        res = {} 
-        #Reduce tables dumbass
-        pos_marg = self.marginal_distributions(query, variables, evidence) #Fix arguments
-        idx = pos_marg[pos_marg['p'].max()].index
-        for var, val in pos_marg, pos_marg.iloc[idx]:
-            if var != 'p':
-                res[var] = val
+    def map(self, variables, evidence):
+        res, cpts = {} , self.bn.get_all_cpts()
+        cpts = self.bn.get_all_cpts()
+        cpts = self.reduce_cpts(cpts, evidence)   
+        pos_marg = self.marginal_distributions(variables, evidence, self.min_fill())
+        bnr.bn.draw_structure()
+        print("\n\n\n\n", pos_marg)
+        for instance in pos_marg:
+            idx = pos_marg[instance]['p'].idxmax()
+            res[pos_marg[instance].columns[-2]] = pos_marg[instance].loc[idx, pos_marg[instance].columns[-2]]
         return res
 
     def mpe(self, query: List[str], evidence):
