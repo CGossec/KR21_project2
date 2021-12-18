@@ -137,6 +137,10 @@ class BNReasoner:
             respective truth assignments.
         :return: a dictionary matching the variables of the query with their respective CPTs as pd.DataFrame
         """
+        for elm in query:
+            for tup in ordering:
+                if elm in tup:
+                    ordering.remove(tup)
         if evidence is None:
             evidence = {}
         pruned_graph = self.pruning(bnr.bn.get_all_variables(), evidence=evidence)
@@ -162,7 +166,7 @@ class BNReasoner:
                     continue
                 if node in S[variable].columns:
                     S[variable] = sum_out_variable(S[variable], node)
-        return {var: self.normalize_with_evidence(factors[var], evidence, factors) for var in query}
+        return {var: self.normalize_with_evidence(S[var], evidence, factors) for var in query}
 
     def normalize_with_evidence(self, cpt: pd.DataFrame, evidence: Dict[str, bool], factors: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         """
@@ -212,8 +216,6 @@ def multiply_factors(cpt1: pd.DataFrame, cpt2: pd.DataFrame) -> pd.DataFrame:
     """
     Multiplies two CPTs, taking the common variables and multiplying the values where it can.
     If no variables are in common, the algorithm won't do anything.
-    TODO: this should look at the factors already computed. Sometimes ordering is bad
-        and we create the factor for a variable after having gone through the elimination already.
 
     :param cpt1: One of the CPTs to multiply
     :param cpt2: The other of the CPTs to multiply
@@ -300,7 +302,4 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
 if __name__ == "__main__":
     bifxml_path = os.getcwd() + "/testing/lecture_example2.BIFXML"
     bnr = BNReasoner(bifxml_path)
-    bnr.bn.draw_structure()
-    #print(bnr.marginal_distributions(["C"], {"A": True}, [('A', 123123), ('B', 123), ('C', 123)]))
-    manual_order = [('I', 12), ('X', 9932), ('Y', 32485), ('J', -19244), ('O', 42)]
-    print(bnr.marginal_distributions('O', {"J": True}, bnr.min_fill()))
+    print(bnr.marginal_distributions('O', {}, bnr.min_degree()))
