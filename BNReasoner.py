@@ -84,8 +84,8 @@ class BNReasoner:
                     modified = True
             CPTs = pruned_graph.get_all_cpts()
             for given in evidence:
-                for variable in CPTs:
-                    cpt = CPTs[variable]
+                for variable in pruned_graph.get_all_cpts():
+                    cpt = pruned_graph.get_all_cpts()[variable]
                     if given not in cpt.columns:
                         continue
                     indices_to_drop = cpt[cpt[given] == (not evidence[given])].index
