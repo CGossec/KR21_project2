@@ -166,7 +166,13 @@ class BNReasoner:
                     continue
                 if node in S[variable].columns:
                     S[variable] = sum_out_variable(S[variable], node)
-        return {var: self.normalize_with_evidence(S[var], evidence, factors) for var in query}
+        result = {var: S[var] for var in query}
+        for var in result:
+            if len(result[var]) > 2:
+                vars_to_remove = list(result[var].columns[:-2])
+                for other in vars_to_remove:
+                    result[var] = sum_out_variable(multiply_factors(result[var], result[other]), other)
+        return {var: self.normalize_with_evidence(result[var], evidence, factors) for var in result}
 
     def normalize_with_evidence(self, cpt: pd.DataFrame, evidence: Dict[str, bool], factors: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         """
@@ -190,13 +196,13 @@ class BNReasoner:
                 if ev in cpts[cpt]:
                     for i in range(0, len(cpts[cpt].index)):
                         if cpts[cpt].loc[i,ev] == (not evidence[ev]):
-                            cpts[cpt] = cpts[cpt].drop(labels=i, axis=0) 
+                            cpts[cpt] = cpts[cpt].drop(labels=i, axis=0)
         return cpts
 
     def map(self, variables, evidence):
         res, cpts = {} , self.bn.get_all_cpts()
         cpts = self.bn.get_all_cpts()
-        cpts = self.reduce_cpts(cpts, evidence)   
+        cpts = self.reduce_cpts(cpts, evidence)
         pos_marg = self.marginal_distributions(variables, evidence, self.min_fill())
         bnr.bn.draw_structure()
         print("\n\n\n\n", pos_marg)
@@ -299,4 +305,4 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
 if __name__ == "__main__":
     bifxml_path = os.getcwd() + "/testing/lecture_example2.BIFXML"
     bnr = BNReasoner(bifxml_path)
-    print(bnr.marginal_distributions('O', {}, bnr.min_degree()))
+    print(bnr.marginal_distributions(['O', 'Y', 'X'], {}, bnr.min_degree()))
