@@ -171,8 +171,11 @@ class BNReasoner:
             if len(result[var]) > 2:
                 vars_to_remove = list(result[var].columns[:-2])
                 for other in vars_to_remove:
-                    result[var] = sum_out_variable(multiply_factors(result[var], result[other]), other)
-        return {var: self.normalize_with_evidence(result[var], evidence, factors) for var in result}
+                    result[var] = multiply_factors(result[var], result[other])
+        res = result[list(result.keys())[0]]
+        for i in range(1, len(result)):
+            res = combine_cpts(res, result[list(result.keys())[i]])
+        return self.normalize_with_evidence(res, evidence, factors)
 
     def normalize_with_evidence(self, cpt: pd.DataFrame, evidence: Dict[str, bool], factors: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         """
