@@ -234,6 +234,42 @@ def multiply_factors(cpt1: pd.DataFrame, cpt2: pd.DataFrame) -> pd.DataFrame:
             res.loc[res[var] == truth_value, "p"] *= row["p"]
     return res
 
+def combine_cpts(cpt1: pd.DataFrame, cpt2: pd.DataFrame) -> pd.DataFrame:
+    """
+    Combine two CPTs:
+    if the input is:
+        A      p
+    0  False  0.3
+    1  True   0.7
+        B      p
+    0  False  0.4
+    1  True   0.6
+    The output should be the combined CPT:
+        A      B      p
+    0  False False  0.12
+    1  False True   0.18
+    2  True  False  0.28
+    3  True  True   0.42
+
+    TODO: this works for two CPTs of length 2, but unsure about larger sizes
+
+    :param cpt1: One of the CPTs
+    :param cpt2: The other of the CPTs
+    :return: the new conditional probability table
+    """
+    largest = cpt1 if len(cpt1) >= len(cpt2) else cpt2
+    smallest = cpt2 if len(cpt1) >= len(cpt2) else cpt1
+    res = pd.DataFrame(list(largest.values), columns=largest.columns)
+    for var in smallest.columns[:-1]:
+        res = pd.DataFrame(list(res.values) * 2, columns=res.columns)
+        res[var] = [True] * (len(res) // 2) + [False] * (len(res) // 2)
+        columns = list(res.columns[-1:]) + list(res.columns[:-1])
+        res = res[columns]
+        for _, row in smallest.iterrows():
+            truth_value = row[var]
+            res.loc[res[var] == truth_value, "p"] *= row["p"]
+    return res
+
 def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
     """
     Given a CPT, we want to remove a variable from it by summing all values opposed with said variable.
