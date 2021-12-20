@@ -84,8 +84,8 @@ class BNReasoner:
                     modified = True
             CPTs = pruned_graph.get_all_cpts()
             for given in evidence:
-                for variable in CPTs:
-                    cpt = CPTs[variable]
+                for variable in pruned_graph.get_all_cpts():
+                    cpt = pruned_graph.get_all_cpts()[variable]
                     if given not in cpt.columns:
                         continue
                     indices_to_drop = cpt[cpt[given] == (not evidence[given])].index
@@ -144,10 +144,9 @@ class BNReasoner:
         if evidence is None:
             evidence = {}
         pruned_graph = self.pruning(bnr.bn.get_all_variables(), evidence=evidence)
-        print(f"Ordering: {ordering}")
-        S = self.bn.get_all_cpts()
+        S = pruned_graph.get_all_cpts()
         factors = {}
-        print([S[cpt] for cpt in [_ for _ in S]], "\n=======================================\n")
+        print([S[cpt] for cpt in S], "\n=======================================\n")
         for (node, _) in ordering:
             factor = None
             for variable in S:
@@ -171,8 +170,11 @@ class BNReasoner:
             if len(result[var]) > 2:
                 vars_to_remove = list(result[var].columns[:-2])
                 for other in vars_to_remove:
-                    result[var] = sum_out_variable(multiply_factors(result[var], result[other]), other)
-        return {var: self.normalize_with_evidence(result[var], evidence, factors) for var in result}
+                    result[var] = multiply_factors(result[var], result[other])
+        res = result[list(result.keys())[0]]
+        for i in range(1, len(result)):
+            res = combine_cpts(res, result[list(result.keys())[i]])
+        return self.normalize_with_evidence(res, evidence, factors)
 
     def normalize_with_evidence(self, cpt: pd.DataFrame, evidence: Dict[str, bool], factors: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         """
@@ -230,6 +232,42 @@ def multiply_factors(cpt1: pd.DataFrame, cpt2: pd.DataFrame) -> pd.DataFrame:
         if var not in res.columns:
             continue
         for _, row in other.iterrows():
+            truth_value = row[var]
+            res.loc[res[var] == truth_value, "p"] *= row["p"]
+    return res
+
+def combine_cpts(cpt1: pd.DataFrame, cpt2: pd.DataFrame) -> pd.DataFrame:
+    """
+    Combine two CPTs:
+    if the input is:
+        A      p
+    0  False  0.3
+    1  True   0.7
+        B      p
+    0  False  0.4
+    1  True   0.6
+    The output should be the combined CPT:
+        A      B      p
+    0  False False  0.12
+    1  False True   0.18
+    2  True  False  0.28
+    3  True  True   0.42
+
+    TODO: this works for two CPTs of length 2, but unsure about larger sizes
+
+    :param cpt1: One of the CPTs
+    :param cpt2: The other of the CPTs
+    :return: the new conditional probability table
+    """
+    largest = cpt1 if len(cpt1) >= len(cpt2) else cpt2
+    smallest = cpt2 if len(cpt1) >= len(cpt2) else cpt1
+    res = pd.DataFrame(list(largest.values), columns=largest.columns)
+    for var in smallest.columns[:-1]:
+        res = pd.DataFrame(list(res.values) * 2, columns=res.columns)
+        res[var] = [True] * (len(res) // 2) + [False] * (len(res) // 2)
+        columns = list(res.columns[-1:]) + list(res.columns[:-1])
+        res = res[columns]
+        for _, row in smallest.iterrows():
             truth_value = row[var]
             res.loc[res[var] == truth_value, "p"] *= row["p"]
     return res
@@ -303,6 +341,9 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
     return res
 
 if __name__ == "__main__":
-    bifxml_path = os.getcwd() + "/testing/lecture_example2.BIFXML"
+    bifxml_path = os.getcwd() + "/testing/lecture_example.BIFXML"
     bnr = BNReasoner(bifxml_path)
-    print(bnr.marginal_distributions(['O', 'Y', 'X'], {}, bnr.min_degree()))
+    query = ['Sprinkler?', 'Rain?']
+    evidence = {"Winter?": True}#, "Sprinkler?": False}
+    res = (bnr.marginal_distributions(query, evidence, bnr.min_degree()))
+    print(res)
