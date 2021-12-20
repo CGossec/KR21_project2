@@ -144,10 +144,9 @@ class BNReasoner:
         if evidence is None:
             evidence = {}
         pruned_graph = self.pruning(bnr.bn.get_all_variables(), evidence=evidence)
-        print(f"Ordering: {ordering}")
-        S = self.bn.get_all_cpts()
+        S = pruned_graph.get_all_cpts()
         factors = {}
-        print([S[cpt] for cpt in [_ for _ in S]], "\n=======================================\n")
+        print([S[cpt] for cpt in S], "\n=======================================\n")
         for (node, _) in ordering:
             factor = None
             for variable in S:
@@ -342,6 +341,9 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
     return res
 
 if __name__ == "__main__":
-    bifxml_path = os.getcwd() + "/testing/lecture_example2.BIFXML"
+    bifxml_path = os.getcwd() + "/testing/lecture_example.BIFXML"
     bnr = BNReasoner(bifxml_path)
-    print(bnr.marginal_distributions(['O', 'Y', 'X'], {}, bnr.min_degree()))
+    query = ['Sprinkler?', 'Rain?']
+    evidence = {"Winter?": True}#, "Sprinkler?": False}
+    res = (bnr.marginal_distributions(query, evidence, bnr.min_degree()))
+    print(res)
