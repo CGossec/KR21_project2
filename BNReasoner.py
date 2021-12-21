@@ -207,51 +207,22 @@ class BNReasoner:
 
     def mpe(self, evidence):
         result = evidence.copy()
-        # self.bn = self.pruning(self.bn.get_all_variables(),evidence)
-        variables = self.bn.get_all_variables()
+        self.bn = self.pruning(self.bn.get_all_variables(),evidence)
         el_order = self.min_fill()
         el_order = [x for (x,_) in el_order]
         cpts = self.reduce_cpts(self.bn.get_all_cpts(), evidence)
-        checked = {}
-        pending = []
-        # print("Variables, el_order: ", variables, el_order)
-        factor = None
-        for i in range(0, len(variables)):
-            print("Begins, order", el_order[i])
-            for cpt in cpts:
-                if el_order[i] in cpts[cpt] and cpt not in checked:
-                    if factor is None:
-                        factor = cpts[cpt]
-                        continue
-                    elif factor is not None and el_order[i] not in factor:
-                        pending.append(factor.copy())
-                        factor = cpts[cpt]
-                        print("PENDINGN AND N FACTOR", pending, factor)
-                        continue
-                        
-
-
-                    print("factor, cpt", factor,"\n",cpts[cpt], "\n")
-                    checked[cpt] = cpts[cpt]
-                    factor = multiply_factors(factor, cpts[cpt])
-
-                    print("New factor", factor, "\n\n")
-                    # cpts[cpt].merge(factor, how='cross')
-                    # print("merged",cpts[cpt])
-
-            for pen in pending:
-                # print("!!!", factor.iloc[: ,:-1] )
-                # print("COLS", any(pen.columns.isin(factor.iloc[: ,:-1])))
-                if any(pen.columns.isin(factor.iloc[: ,:-1])):
-                    print("Pen mult by factor", pen, factor)
-                    factor = multiply_factors(factor, pen)
-                    print("AFter pen factor", factor)
-                    pending.remove(pen)
-            # print("--------------------------")
-            print("Afterall factor and pending: ",factor, "\n", pending)
-            if el_order[i] in factor:
-                factor = max_out_variable(factor, el_order[i])
-            print("Summed factor\n", factor)
+        cpts_l = [ cpts[x] for x in cpts]
+        factors = multiply_factors(cpts_l)
+        factors = self.reduce_cpts({'Factors':factors}, evidence)['Factors']
+        factors_copy = factors.copy()
+        prob = None
+        for i in el_order:
+            factors_copy, prob = max_out_variable(factors_copy, i)
+        sol = factors.loc[factors['p'] == prob]
+        for var in sol:
+            if var is not 'p':
+                result[var] = sol.iloc[0][var]
+        return result
 
 
 def create_cpt(vars: List[str]) -> pd.DataFrame:
@@ -295,20 +266,21 @@ def max_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
     cols = list(res.columns)
     var_to_remove = cols.index(variable)
     indices_to_drop = []
-    # print("RES", res)
+    sol = None
     for ii, row in res.iterrows():
         # print("ii, row", ii, row)
         if row[variable] == True:
             opposite_row, index = find_complementary_row(cpt, row, var_to_remove)
             if opposite_row is not None:
                 res.loc[ii, "p"] = max(res.loc[ii, "p"], opposite_row["p"])
+                sol = res.loc[ii, "p"]
                 indices_to_drop.append(index)
     res = res.drop(indices_to_drop)
     res = res.reset_index(drop=True)
     if res.columns[-2] != variable:
         res = res.drop(columns=[variable])
     #print(f"End result is: \n{res}\n====================================")
-    return res
+    return res, sol
 
 def multiply_factors(factors: List[pd.DataFrame]) -> pd.DataFrame:
     """
