@@ -195,14 +195,14 @@ class BNReasoner:
 
     def map(self, variables, evidence):
         res, cpts = {} , self.bn.get_all_cpts()
-        cpts = self.bn.get_all_cpts()
         cpts = self.reduce_cpts(cpts, evidence)
         pos_marg = self.marginal_distributions(variables, evidence, self.min_fill())
-        bnr.bn.draw_structure()
-        print("\n\n\n\n", pos_marg)
-        for instance in pos_marg:
-            idx = pos_marg[instance]['p'].idxmax()
-            res[pos_marg[instance].columns[-2]] = pos_marg[instance].loc[idx, pos_marg[instance].columns[-2]]
+        idx = pos_marg['p'].idxmax()
+        print(variables)
+        print(pos_marg)
+        for var in pos_marg:
+            if var in variables:
+                res[var] = pos_marg.iloc[idx][var]
         return res
 
     def mpe(self, evidence):
