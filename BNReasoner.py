@@ -90,6 +90,8 @@ class BNReasoner:
                         continue
                     indices_to_drop = cpt[cpt[given] == (not evidence[given])].index
                     new_cpt = cpt.drop(indices_to_drop)
+                    # if new_cpt.columns[-2] != given:
+                    #     new_cpt = new_cpt.drop(columns=given)
                     new_cpt = new_cpt.reset_index(drop=True)
                     pruned_graph.update_cpt(variable, new_cpt)
                 for child in pruned_graph.get_children(given):
@@ -144,37 +146,23 @@ class BNReasoner:
         if evidence is None:
             evidence = {}
         pruned_graph = self.pruning(bnr.bn.get_all_variables(), evidence=evidence)
-        S = pruned_graph.get_all_cpts()
+        S = pruned_graph.get_all_cpts().copy()
         factors = {}
-        print([S[cpt] for cpt in S], "\n=======================================\n")
+        # print([S[cpt] for cpt in S], "\n=======================================\n")
         for (node, _) in ordering:
-            factor = None
-            for variable in S:
+            factors_to_mult = []
+            indices = []
+            for index, variable in enumerate(S):
                 cpt = S[variable]
                 if node in cpt.columns:
-                    if factor is None:
-                        factor = cpt
-                        continue
-                    S[variable] = multiply_factors(factor, cpt)
-            factors[node] = factor
-            for variable in S:
-                if S[variable].empty:
-                    continue
-                if S[variable].columns[-2] == node:
-                    S[variable] = pd.DataFrame()
-                    continue
-                if node in S[variable].columns:
-                    S[variable] = sum_out_variable(S[variable], node)
-        result = {var: S[var] for var in query}
-        for var in result:
-            if len(result[var]) > 2:
-                vars_to_remove = list(result[var].columns[:-2])
-                for other in vars_to_remove:
-                    result[var] = multiply_factors(result[var], result[other])
-        res = result[list(result.keys())[0]]
-        for i in range(1, len(result)):
-            res = combine_cpts(res, result[list(result.keys())[i]])
-        return self.normalize_with_evidence(res, evidence, factors)
+                    factors_to_mult.append(cpt)
+                    indices.append(index)
+            factor = multiply_factors(factors_to_mult)
+            factors[node] = sum_out_variable(factor, node)
+            for index in indices:
+                S[list(S.keys())[index]] = factors[node]
+        final_factor = multiply_factors(list(factors.values()))
+        return self.normalize_with_evidence(final_factor, evidence, factors)
 
     def normalize_with_evidence(self, cpt: pd.DataFrame, evidence: Dict[str, bool], factors: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         """
@@ -217,59 +205,49 @@ class BNReasoner:
         prunned_net = self.pruning(query, evidence)
 
 
-def multiply_factors(cpt1: pd.DataFrame, cpt2: pd.DataFrame) -> pd.DataFrame:
+def create_cpt(vars: List[str]) -> pd.DataFrame:
     """
-    Multiplies two CPTs, taking the common variables and multiplying the values where it can.
-    If no variables are in common, the algorithm won't do anything.
+    Creates a CPT with proba 1 for every value.
+    The CPT contains all possible variable instantiations.
 
-    :param cpt1: One of the CPTs to multiply
-    :param cpt2: The other of the CPTs to multiply
-    :return: a CPT containing the multiplication result of both CPTs
+    :param vars: List of variables to instantiate in the CPT
+    :return: A joint CPT for all possible variable instantiations, every row has proba 1
     """
-    res = cpt2 if len(cpt2.columns) > len(cpt1.columns) else cpt1
-    other = cpt1 if len(cpt2.columns) > len(cpt1.columns) else cpt2
-    for var in other.columns[:-1]:
-        if var not in res.columns:
+    res = None
+    for var in vars:
+        if res is None:
+            res = pd.DataFrame({var: [True, False], "p": [1, 1]})
             continue
-        for _, row in other.iterrows():
-            truth_value = row[var]
-            res.loc[res[var] == truth_value, "p"] *= row["p"]
-    return res
-
-def combine_cpts(cpt1: pd.DataFrame, cpt2: pd.DataFrame) -> pd.DataFrame:
-    """
-    Combine two CPTs:
-    if the input is:
-        A      p
-    0  False  0.3
-    1  True   0.7
-        B      p
-    0  False  0.4
-    1  True   0.6
-    The output should be the combined CPT:
-        A      B      p
-    0  False False  0.12
-    1  False True   0.18
-    2  True  False  0.28
-    3  True  True   0.42
-
-    TODO: this works for two CPTs of length 2, but unsure about larger sizes
-
-    :param cpt1: One of the CPTs
-    :param cpt2: The other of the CPTs
-    :return: the new conditional probability table
-    """
-    largest = cpt1 if len(cpt1) >= len(cpt2) else cpt2
-    smallest = cpt2 if len(cpt1) >= len(cpt2) else cpt1
-    res = pd.DataFrame(list(largest.values), columns=largest.columns)
-    for var in smallest.columns[:-1]:
         res = pd.DataFrame(list(res.values) * 2, columns=res.columns)
         res[var] = [True] * (len(res) // 2) + [False] * (len(res) // 2)
         columns = list(res.columns[-1:]) + list(res.columns[:-1])
         res = res[columns]
-        for _, row in smallest.iterrows():
-            truth_value = row[var]
-            res.loc[res[var] == truth_value, "p"] *= row["p"]
+    return res
+
+def multiply_factors(factors: List[pd.DataFrame]) -> pd.DataFrame:
+    """
+    Multiplies CPTs, taking the common variables and multiplying the values where it can.
+
+    :param factors: A list of all the factors to multiply with each other
+    :return: a CPT containing the multiplication result of all CPTs
+    """
+    res = factors[0]
+    for factor in factors[1:]:
+        res = res.merge(factor, how="outer")
+    res = res.drop(columns=["p"])
+    columns = list(res.columns)
+    res = create_cpt(columns)
+    keys = list(res.columns[:-1])
+    for row_index, row in res.iterrows():
+        for i in range(len(factors)):
+            cols_to_match = list(factors[i].columns[:-1])
+            cond = [row.all() for row in np.array([[factors[i][col] == row[col]] for col in cols_to_match]).T]
+            try:
+                index = cond.index(True)
+            except:
+                index = None
+            if index is not None:
+                res.loc[row_index, "p"] *= factors[i].iloc[index]["p"]
     return res
 
 def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
@@ -335,8 +313,7 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
                 indices_to_drop.append(index)
     res = res.drop(indices_to_drop)
     res = res.reset_index(drop=True)
-    if res.columns[-2] != variable:
-        res = res.drop(columns=[variable])
+    res = res.drop(columns=[variable])
     print(f"End result is: \n{res}\n====================================")
     return res
 
@@ -344,6 +321,6 @@ if __name__ == "__main__":
     bifxml_path = os.getcwd() + "/testing/lecture_example.BIFXML"
     bnr = BNReasoner(bifxml_path)
     query = ['Sprinkler?', 'Rain?']
-    evidence = {"Winter?": True}#, "Sprinkler?": False}
+    evidence = {}#"Winter?": True}#, "Slippery Road?": False}
     res = (bnr.marginal_distributions(query, evidence, bnr.min_degree()))
     print(res)
