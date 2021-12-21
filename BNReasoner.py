@@ -181,12 +181,18 @@ class BNReasoner:
         return res
 
     def reduce_cpts(self, cpts, evidence):
+        if not evidence:
+            return cpts
+
         for cpt in cpts:
             for ev in evidence:
                 if ev in cpts[cpt]:
-                    for i in range(0, len(cpts[cpt].index)):
+                    for i in range(len(cpts[cpt].index)-1,-1,-1):
+                        # cpts[cpt] = cpts[cpt][cpts[cpt].columns[ev] != evidence[ev]]
                         if cpts[cpt].loc[i,ev] == (not evidence[ev]):
                             cpts[cpt] = cpts[cpt].drop(labels=i, axis=0)
+                            cpts[cpt] = cpts[cpt].reset_index(drop=True)
+            self.bn.update_cpt(cpt, cpts[cpt])
         return cpts
 
     def map(self, variables, evidence):
@@ -201,8 +207,53 @@ class BNReasoner:
             res[pos_marg[instance].columns[-2]] = pos_marg[instance].loc[idx, pos_marg[instance].columns[-2]]
         return res
 
-    def mpe(self, query: List[str], evidence):
-        prunned_net = self.pruning(query, evidence)
+    def mpe(self, evidence):
+        result = evidence.copy()
+        # self.bn = self.pruning(self.bn.get_all_variables(),evidence)
+        variables = self.bn.get_all_variables()
+        el_order = self.min_fill()
+        el_order = [x for (x,_) in el_order]
+        cpts = self.reduce_cpts(self.bn.get_all_cpts(), evidence)
+        checked = {}
+        pending = []
+        # print("Variables, el_order: ", variables, el_order)
+        factor = None
+        for i in range(0, len(variables)):
+            print("Begins, order", el_order[i])
+            for cpt in cpts:
+                if el_order[i] in cpts[cpt] and cpt not in checked:
+                    if factor is None:
+                        factor = cpts[cpt]
+                        continue
+                    elif factor is not None and el_order[i] not in factor:
+                        pending.append(factor.copy())
+                        factor = cpts[cpt]
+                        print("PENDINGN AND N FACTOR", pending, factor)
+                        continue
+                        
+
+
+                    print("factor, cpt", factor,"\n",cpts[cpt], "\n")
+                    checked[cpt] = cpts[cpt]
+                    factor = multiply_factors(factor, cpts[cpt])
+
+                    print("New factor", factor, "\n\n")
+                    # cpts[cpt].merge(factor, how='cross')
+                    # print("merged",cpts[cpt])
+
+            for pen in pending:
+                # print("!!!", factor.iloc[: ,:-1] )
+                # print("COLS", any(pen.columns.isin(factor.iloc[: ,:-1])))
+                if any(pen.columns.isin(factor.iloc[: ,:-1])):
+                    print("Pen mult by factor", pen, factor)
+                    factor = multiply_factors(factor, pen)
+                    print("AFter pen factor", factor)
+                    pending.remove(pen)
+            # print("--------------------------")
+            print("Afterall factor and pending: ",factor, "\n", pending)
+            if el_order[i] in factor:
+                factor = max_out_variable(factor, el_order[i])
+            print("Summed factor\n", factor)
 
 
 def create_cpt(vars: List[str]) -> pd.DataFrame:
@@ -222,6 +273,43 @@ def create_cpt(vars: List[str]) -> pd.DataFrame:
         res[var] = [True] * (len(res) // 2) + [False] * (len(res) // 2)
         columns = list(res.columns[-1:]) + list(res.columns[:-1])
         res = res[columns]
+    return res
+
+def max_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
+
+    def find_complementary_row(cpt: pd.DataFrame, entry_row: pd.Series, index_to_switch: int) -> Tuple[pd.Series, int]:
+        complementary_values = list(entry_row)[:-1]
+        complementary_values[index_to_switch] = not complementary_values[index_to_switch]
+        row_matches_conditions = [row.all() # every condition needs to evaluate to true
+            for row in np.array( # We use numpy so can transpose
+                [cpt[cpt.columns[i]] == complementary_values[i] # Compare cpt[SOME_COLUMN] with complementary_value[SOME_COLUMN]
+                for i in range(len(complementary_values))] # for every column that we want to match
+                ).T]
+        try:
+            index = row_matches_conditions.index(True)
+            complementary_row = cpt.iloc[index]
+            return complementary_row, index
+        except:
+            return None, None
+
+    #print(f"Summing out variable {variable} from \n{cpt}")
+    res = cpt.copy()
+    cols = list(res.columns)
+    var_to_remove = cols.index(variable)
+    indices_to_drop = []
+    # print("RES", res)
+    for ii, row in res.iterrows():
+        # print("ii, row", ii, row)
+        if row[variable] == True:
+            opposite_row, index = find_complementary_row(cpt, row, var_to_remove)
+            if opposite_row is not None:
+                res.loc[ii, "p"] = max(res.loc[ii, "p"], opposite_row["p"])
+                indices_to_drop.append(index)
+    res = res.drop(indices_to_drop)
+    res = res.reset_index(drop=True)
+    if res.columns[-2] != variable:
+        res = res.drop(columns=[variable])
+    #print(f"End result is: \n{res}\n====================================")
     return res
 
 def multiply_factors(factors: List[pd.DataFrame]) -> pd.DataFrame:
