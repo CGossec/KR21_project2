@@ -88,12 +88,8 @@ class BNReasoner:
                     cpt = pruned_graph.get_all_cpts()[variable]
                     if given not in cpt.columns:
                         continue
-                    indices_to_drop = cpt[cpt[given] == (not evidence[given])].index
-                    new_cpt = cpt.drop(indices_to_drop)
-                    # if new_cpt.columns[-2] != given:
-                    #     new_cpt = new_cpt.drop(columns=given)
-                    new_cpt = new_cpt.reset_index(drop=True)
-                    pruned_graph.update_cpt(variable, new_cpt)
+                    cpt.loc[cpt[given] == (not evidence[given]), "p"] = 0
+                    pruned_graph.update_cpt(variable, cpt)
                 for child in pruned_graph.get_children(given):
                     pruned_graph.del_edge((given, child))
                     modified = True
@@ -175,7 +171,9 @@ class BNReasoner:
         """
         res = cpt.copy()
         for var in evidence:
-            evidence_cpt = factors[var]
+            evidence_cpt = self.bn.get_cpt(var).copy()
+            if np.array([col in evidence_cpt.columns[:-1] for col in np.array(res.columns[:-1])]).any():
+                continue
             proba_of_evidence = float(evidence_cpt[evidence_cpt[var] == evidence[var]]["p"])
             res["p"] = res["p"] / proba_of_evidence
         return res
@@ -388,7 +386,7 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
         except:
             return None, None
 
-    print(f"Summing out variable {variable} from \n{cpt}")
+    # print(f"Summing out variable {variable} from \n{cpt}")
     res = cpt.copy()
     cols = list(res.columns)
     var_to_remove = cols.index(variable)
@@ -402,13 +400,13 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
     res = res.drop(indices_to_drop)
     res = res.reset_index(drop=True)
     res = res.drop(columns=[variable])
-    print(f"End result is: \n{res}\n====================================")
+    # print(f"End result is: \n{res}\n====================================")
     return res
 
 if __name__ == "__main__":
     bifxml_path = os.getcwd() + "/testing/lecture_example.BIFXML"
     bnr = BNReasoner(bifxml_path)
     query = ['Sprinkler?', 'Rain?']
-    evidence = {}#"Winter?": True}#, "Slippery Road?": False}
+    evidence = {"Winter?": True}#, "Slippery Road?": False}
     res = (bnr.marginal_distributions(query, evidence, bnr.min_degree()))
     print(res)
