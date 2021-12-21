@@ -376,10 +376,36 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
     # print(f"End result is: \n{res}\n====================================")
     return res
 
+# if __name__ == "__main__":
+#     # bifxml_path = os.getcwd() + "/testing/lecture_example.BIFXML"
+#     bifxml_path = os.getcwd() + "/testing/covid_delta-variant.BIFXML"
+#     bifxml_path = os.getcwd() + "/testing/TC.BIFXML"
+#     bifxml_path = os.getcwd() + "/cancer.BIFXML"
+#     bnr = BNReasoner(bifxml_path)
+#     query = ['V?','H?','HMS?']
+#     query = ['Smoker']
+#     # evidence = {'V?': True, 'H?': True, 'HMS?': True}
+#     evidence = {'Dyspnoea': True, 'Pollution': False}
+#
+#     # evidence = {"Winter?": True}#, "Slippery Road?": False}
+#     # evidence = {}
+#     res = (bnr.marginal_distributions(query, evidence, bnr.min_degree()))
+#     print(res)
+
+
+t2_set = {'/cancer.BIFXML':[['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/child.BIFXML': [['node22', 'node56'],[{'node17': 'state0', 'node5': 'state0'}]], '/hailfinder.BIFXML': [['AMInsWliScen', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/hepar2.BIFXML': [['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/mildew.BIFXML': [['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]]}
+# print(t2_set[list(t2_set.keys())[0]][1][0])
 if __name__ == "__main__":
-    bifxml_path = os.getcwd() + "/testing/lecture_example.BIFXML"
+    bifxml_path = os.getcwd() + r"/testing/X1.BIFXML"
+
+    # bifxml_path = os.getcwd() + "/testing/lecture_example.BIFXML"
     bnr = BNReasoner(bifxml_path)
     query = ['Sprinkler?', 'Rain?']
-    evidence = {"Winter?": True}#, "Slippery Road?": False}
-    res = (bnr.marginal_distributions(query, evidence, bnr.min_degree()))
-    print(res)
+    evidence = {"Winter?": True, 'Sprinkler?': False, 'Rain?': False}#, "Slippery Road?": False}
+    # evidence = {"Winter?": True}#, "Slippery Road?": False}
+
+    # res = (bnr.marginal_distributions(query, evidence, bnr.min_degree()))
+    # print(res)
+print(os.getcwd())
+print(bnr.mpe(t2_set[list(t2_set.keys())[1]][1][0]))
+print(bnr.map(t2_set[list(t2_set.keys())[1]][0], t2_set[list(t2_set.keys())[0]][1][0]))
