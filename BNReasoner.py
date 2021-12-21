@@ -378,7 +378,7 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
 
 # if __name__ == "__main__":
 #     # bifxml_path = os.getcwd() + "/testing/lecture_example.BIFXML"
-#     bifxml_path = os.getcwd() + "/testing/covid_delta-variant.BIFXML"
+#     bifxml_path = os.getcwd() + "/testing/covid_omicron-variant.BIFXML"
 #     bifxml_path = os.getcwd() + "/testing/TC.BIFXML"
 #     bifxml_path = os.getcwd() + "/cancer.BIFXML"
 #     bnr = BNReasoner(bifxml_path)
