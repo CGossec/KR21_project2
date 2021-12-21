@@ -393,7 +393,7 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
 #     print(res)
 
 
-t2_set = {'/cancer.BIFXML':[['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/child.BIFXML': [['node22', 'node56'],[{'node17': 'state0', 'node5': 'state0'}]], '/hailfinder.BIFXML': [['AMInsWliScen', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/hepar2.BIFXML': [['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/mildew.BIFXML': [['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]]}
+t2_set = {'/cancer.BIFXML':[['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/child.BIFXML': [['node22', 'node9'],[{'node17': 'state0', 'node5': 'state0'}]], '/hailfinder.BIFXML': [['AMInsWliScen', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/hepar2.BIFXML': [['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/mildew.BIFXML': [['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]]}
 # print(t2_set[list(t2_set.keys())[0]][1][0])
 if __name__ == "__main__":
     bifxml_path = os.getcwd() + r"/testing/X1.BIFXML"
