@@ -190,7 +190,7 @@ class BNReasoner:
                         if cpts[cpt].loc[i,ev] == (not evidence[ev]):
                             cpts[cpt] = cpts[cpt].drop(labels=i, axis=0)
                             cpts[cpt] = cpts[cpt].reset_index(drop=True)
-            self.bn.update_cpt(cpt, cpts[cpt])
+            # self.bn.update_cpt(cpt, cpts[cpt])
         return cpts
 
     def map(self, variables, evidence):
@@ -275,13 +275,14 @@ def max_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
                 res.loc[ii, "p"] = max(res.loc[ii, "p"], opposite_row["p"])
                 sol = res.loc[ii, "p"]
                 indices_to_drop.append(index)
+    if not sol:
+        sol = res.loc[ii, "p"]
     res = res.drop(indices_to_drop)
     res = res.reset_index(drop=True)
     if res.columns[-2] != variable:
         res = res.drop(columns=[variable])
     #print(f"End result is: \n{res}\n====================================")
     return res, sol
-
 def multiply_factors(factors: List[pd.DataFrame]) -> pd.DataFrame:
     """
     Multiplies CPTs, taking the common variables and multiplying the values where it can.
