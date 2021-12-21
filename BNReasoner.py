@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
+import random
 
 from BayesNet import BayesNet
 
@@ -94,6 +95,20 @@ class BNReasoner:
                     pruned_graph.del_edge((given, child))
                     modified = True
         return pruned_graph
+    
+    def random_selection(self):
+        """
+        Chooses random order for all the variables.
+
+        :return: a list the variables randomly ordered.
+        """
+        order = []
+        vars = self.bn.get_all_variables()
+        for i in range(0, len(vars)):
+            el = random.choice(vars)
+            order.append(el)
+            vars.remove(el)
+        return order
 
     def min_degree(self) -> List[Tuple[str, int]]:
         """
@@ -178,7 +193,14 @@ class BNReasoner:
             res["p"] = res["p"] / proba_of_evidence
         return res
 
-    def reduce_cpts(self, cpts, evidence):
+    def reduce_cpts(self, cpts: Dict, evidence: Dict):
+        """
+        Reduces the tables by deleting the rows that are not aligned with the evidence.
+
+        :param cpts: A dictionary containing all the Dataframes that represent the CPTs.
+        :param evidence: A dictionary with the variables and assigned thruth values.
+        :return: A dictionary of all the reduced Dataframes. 
+        """
         if not evidence:
             return cpts
 
@@ -186,26 +208,34 @@ class BNReasoner:
             for ev in evidence:
                 if ev in cpts[cpt]:
                     for i in range(len(cpts[cpt].index)-1,-1,-1):
-                        # cpts[cpt] = cpts[cpt][cpts[cpt].columns[ev] != evidence[ev]]
                         if cpts[cpt].loc[i,ev] == (not evidence[ev]):
                             cpts[cpt] = cpts[cpt].drop(labels=i, axis=0)
                             cpts[cpt] = cpts[cpt].reset_index(drop=True)
-            # self.bn.update_cpt(cpt, cpts[cpt])
         return cpts
+    def map(self, variables: List[str], evidence: Dict):
+        """
+        Calculates the most likely instantiation of the asked variables based on some evidence.
 
-    def map(self, variables, evidence):
+        :param variables: A list with the variables which the instantiation is desired.
+        :param evidence: A dictionary with the variables and assigned thruth values.
+        :return: A dictionary with the asked variables and their instantiation
+        """
         res, cpts = {} , self.bn.get_all_cpts()
         cpts = self.reduce_cpts(cpts, evidence)
         pos_marg = self.marginal_distributions(variables, evidence, self.min_fill())
         idx = pos_marg['p'].idxmax()
-        print(variables)
-        print(pos_marg)
         for var in pos_marg:
             if var in variables:
                 res[var] = pos_marg.iloc[idx][var]
         return res
 
-    def mpe(self, evidence):
+    def mpe(self, evidence: Dict):
+        """
+        Calculates the most likely instantiation of all of variables based on some evidence.
+
+        :param evidence: A dictionary with the variables and assigned thruth values.
+        :return: A dictionary with all of the variables and their instantiation
+        """
         result = evidence.copy()
         self.bn = self.pruning(self.bn.get_all_variables(),evidence)
         el_order = self.min_fill()
@@ -245,21 +275,13 @@ def create_cpt(vars: List[str]) -> pd.DataFrame:
     return res
 
 def max_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
+    """
+    Reduced a variable in a cpt by choosing the maximum of the probabilities.
 
-    def find_complementary_row(cpt: pd.DataFrame, entry_row: pd.Series, index_to_switch: int) -> Tuple[pd.Series, int]:
-        complementary_values = list(entry_row)[:-1]
-        complementary_values[index_to_switch] = not complementary_values[index_to_switch]
-        row_matches_conditions = [row.all() # every condition needs to evaluate to true
-            for row in np.array( # We use numpy so can transpose
-                [cpt[cpt.columns[i]] == complementary_values[i] # Compare cpt[SOME_COLUMN] with complementary_value[SOME_COLUMN]
-                for i in range(len(complementary_values))] # for every column that we want to match
-                ).T]
-        try:
-            index = row_matches_conditions.index(True)
-            complementary_row = cpt.iloc[index]
-            return complementary_row, index
-        except:
-            return None, None
+    :param cpt: A Dataframe that contains all the probabilities.
+    :param variable: A string with the variable that wants to be reduced.
+    :return: A Dataframe that corresponds to the cpt with the reduced variable. 
+    """
 
     #print(f"Summing out variable {variable} from \n{cpt}")
     res = cpt.copy()
@@ -283,6 +305,7 @@ def max_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
         res = res.drop(columns=[variable])
     #print(f"End result is: \n{res}\n====================================")
     return res, sol
+
 def multiply_factors(factors: List[pd.DataFrame]) -> pd.DataFrame:
     """
     Multiplies CPTs, taking the common variables and multiplying the values where it can.
@@ -329,35 +352,6 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
     :param variable: The variable that will be removed through summing out
     :return: the new conditional probability table
     """
-    def find_complementary_row(cpt: pd.DataFrame, entry_row: pd.Series, index_to_switch: int) -> Tuple[pd.Series, int]:
-        """
-        Featuring the most complex list comprehension I have ever written, without a doubt.
-
-        This function creates an array out of the values of the current row, excluding the probability row;
-        it then switches the value of the variable to remove, before individually checking every row of the
-        given CPT for the row that matches every value (there can only be one).
-        It returns the appropriate row, as well as the index of that row, to easily drop it in the main function.
-
-        :param cpt: the CPT through which we iterate to find the complementary value
-        :param entry_row: the row of which we want to find the complementary value
-        :param index_to_switch: the column index of the row we want to switch. In example above, this would be 0,
-            since we want to add up probabilities for switched values of A
-        :return: the complementary row and its index, or None if there were no complementaries (so the variable to sum out was given
-            as evidence)
-        """
-        complementary_values = list(entry_row)[:-1]
-        complementary_values[index_to_switch] = not complementary_values[index_to_switch]
-        row_matches_conditions = [row.all() # every condition needs to evaluate to true
-            for row in np.array( # We use numpy so can transpose
-                [cpt[cpt.columns[i]] == complementary_values[i] # Compare cpt[SOME_COLUMN] with complementary_value[SOME_COLUMN]
-                for i in range(len(complementary_values))] # for every column that we want to match
-                ).T]
-        try:
-            index = row_matches_conditions.index(True)
-            complementary_row = cpt.iloc[index]
-            return complementary_row, index
-        except:
-            return None, None
 
     # print(f"Summing out variable {variable} from \n{cpt}")
     res = cpt.copy()
@@ -375,6 +369,38 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
     res = res.drop(columns=[variable])
     # print(f"End result is: \n{res}\n====================================")
     return res
+
+
+def find_complementary_row(cpt: pd.DataFrame, entry_row: pd.Series, index_to_switch: int) -> Tuple[pd.Series, int]:
+    """
+    Featuring the most complex list comprehension I have ever written, without a doubt.
+
+    This function creates an array out of the values of the current row, excluding the probability row;
+    it then switches the value of the variable to remove, before individually checking every row of the
+    given CPT for the row that matches every value (there can only be one).
+    It returns the appropriate row, as well as the index of that row, to easily drop it in the main function.
+
+    :param cpt: the CPT through which we iterate to find the complementary value
+    :param entry_row: the row of which we want to find the complementary value
+    :param index_to_switch: the column index of the row we want to switch. In example above, this would be 0,
+        since we want to add up probabilities for switched values of A
+    :return: the complementary row and its index, or None if there were no complementaries (so the variable to sum out was given
+        as evidence)
+    """
+    complementary_values = list(entry_row)[:-1]
+    complementary_values[index_to_switch] = not complementary_values[index_to_switch]
+    row_matches_conditions = [row.all() # every condition needs to evaluate to true
+        for row in np.array( # We use numpy so can transpose
+            [cpt[cpt.columns[i]] == complementary_values[i] # Compare cpt[SOME_COLUMN] with complementary_value[SOME_COLUMN]
+            for i in range(len(complementary_values))] # for every column that we want to match
+            ).T]
+    try:
+        index = row_matches_conditions.index(True)
+        complementary_row = cpt.iloc[index]
+        return complementary_row, index
+    except:
+        return None, None
+
 
 # if __name__ == "__main__":
 #     # bifxml_path = os.getcwd() + "/testing/lecture_example.BIFXML"
