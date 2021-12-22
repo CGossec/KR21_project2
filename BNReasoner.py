@@ -243,6 +243,7 @@ class BNReasoner:
                             cpts[cpt] = cpts[cpt].drop(labels=i, axis=0)
                             cpts[cpt] = cpts[cpt].reset_index(drop=True)
         return cpts
+
     def map(self, variables: List[str], evidence: Dict):
         """
         Calculates the most likely instantiation of the asked variables based on some evidence.
@@ -428,10 +429,14 @@ def find_complementary_row(cpt: pd.DataFrame, entry_row: pd.Series, index_to_swi
         return None, None
 
 if __name__ == "__main__":
-    bifxml_path = os.getcwd() + r"/testing/X1.BIFXML"
+    bifxml_path = os.getcwd() + r"/testing/covid_omicron-variant.BIFXML"
     bnr = BNReasoner(bifxml_path)
 
-    t2_set = {'/cancer.BIFXML':[['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/child.BIFXML': [['node22', 'node9'],[{'node17': 'state0', 'node5': 'state0'}]], '/hailfinder.BIFXML': [['AMInsWliScen', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/hepar2.BIFXML': [['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/mildew.BIFXML': [['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]]}
+    query = ["H?", "V?", "HMS?"]
+    evidence = {}
+    ordering = bnr.min_fill()
 
-    print(bnr.mpe(t2_set[list(t2_set.keys())[1]][1][0]))
-    print(bnr.map(t2_set[list(t2_set.keys())[1]][0], t2_set[list(t2_set.keys())[0]][1][0]))
+    marginal = bnr.marginal_distributions(query, evidence, ordering)
+    MAP = bnr.map(query, evidence)
+
+    print("Successful execution of the given queries!")
