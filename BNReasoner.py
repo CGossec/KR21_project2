@@ -404,7 +404,7 @@ def find_complementary_row(cpt: pd.DataFrame, entry_row: pd.Series, index_to_swi
 
 # if __name__ == "__main__":
 #     # bifxml_path = os.getcwd() + "/testing/lecture_example.BIFXML"
-#     bifxml_path = os.getcwd() + "/testing/covid_omicron-variant.BIFXML"
+#     bifxml_path = os.getcwd() + "/testing/covid_delta-variant.BIFXML"
 #     bifxml_path = os.getcwd() + "/testing/TC.BIFXML"
 #     bifxml_path = os.getcwd() + "/cancer.BIFXML"
 #     bnr = BNReasoner(bifxml_path)

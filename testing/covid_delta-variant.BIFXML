@@ -93,14 +93,14 @@
         <FOR>I?</FOR>
         <GIVEN>IC?</GIVEN>
         <GIVEN>V?</GIVEN>
-        <TABLE>0.5 0.5 0.7 0.3 0.1 0.9 0.6 0.4</TABLE>
+        <TABLE>0.7 0.3 0.9 0.1 0.3 0.7 0.8 0.2</TABLE>
     </DEFINITION>
      <DEFINITION>
         <FOR>H?</FOR>
         <GIVEN>V?</GIVEN>
         <GIVEN>PP?</GIVEN>
         <GIVEN>I?</GIVEN>
-        <TABLE>0.78 0.22 0.6 0.4 0.7 0.3 0.45 0.55 0.79 0.21 0.7 0.3 0.75 0.25 0.6 0.4</TABLE>
+        <TABLE>0.98 0.02 0.8 0.2 0.9 0.1 0.65 0.35 0.99 0.01 0.9 0.1 0.95 0.05 0.8 0.2</TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Q?</FOR>
