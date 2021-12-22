@@ -1,12 +1,12 @@
 import copy
 import os
+import random
 from typing import Dict, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
-import random
 
 from BayesNet import BayesNet
 
@@ -95,7 +95,7 @@ class BNReasoner:
                     pruned_graph.del_edge((given, child))
                     modified = True
         return pruned_graph
-    
+
     def random_selection(self):
         """
         Chooses random order for all the variables.
@@ -159,7 +159,6 @@ class BNReasoner:
         pruned_graph = self.pruning(bnr.bn.get_all_variables(), evidence=evidence)
         S = pruned_graph.get_all_cpts().copy()
         factors = {}
-        # print([S[cpt] for cpt in S], "\n=======================================\n")
         for (node, _) in ordering:
             factors_to_mult = []
             indices = []
@@ -168,11 +167,42 @@ class BNReasoner:
                 if node in cpt.columns:
                     factors_to_mult.append(cpt)
                     indices.append(index)
-            factor = multiply_factors(factors_to_mult)
-            factors[node] = sum_out_variable(factor, node)
-            for index in indices:
-                S[list(S.keys())[index]] = factors[node]
-        final_factor = multiply_factors(list(factors.values()))
+            try:
+                factor = multiply_factors(factors_to_mult)
+                factors[node] = sum_out_variable(factor, node)
+                replaced = False
+                for index in indices:
+                    if not replaced:
+                        S[list(S.keys())[index]] = factors[node]
+                        replaced = True
+                    else:
+                        S[list(S.keys())[index]] = pd.DataFrame()
+            except:
+                pass
+        all_factors = list(factors.values())
+        to_mult_for_res = []
+        for factor in all_factors:
+            for cpt in list(S.values()):
+                try:
+                    if np.array(factor == cpt).all():
+                        to_mult_for_res.append(factor)
+                        break
+                except:
+                    continue
+        for cpt in list(S.values()):
+            if cpt.empty:
+                continue
+            found = False
+            for factor in all_factors:
+                try:
+                    if np.array(factor == cpt).all():
+                        found = True
+                        break
+                except:
+                    continue
+            if not found:
+                to_mult_for_res.append(cpt)
+        final_factor = multiply_factors(to_mult_for_res)
         return self.normalize_with_evidence(final_factor, evidence, factors)
 
     def normalize_with_evidence(self, cpt: pd.DataFrame, evidence: Dict[str, bool], factors: Dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -189,7 +219,8 @@ class BNReasoner:
             evidence_cpt = self.bn.get_cpt(var).copy()
             if np.array([col in evidence_cpt.columns[:-1] for col in np.array(res.columns[:-1])]).any():
                 continue
-            proba_of_evidence = float(evidence_cpt[evidence_cpt[var] == evidence[var]]["p"])
+            reduced_evidence_cpt = self.reduce_cpts({var: evidence_cpt}, evidence)[var]
+            proba_of_evidence = float(reduced_evidence_cpt[reduced_evidence_cpt[var] == evidence[var]]["p"])
             res["p"] = res["p"] / proba_of_evidence
         return res
 
@@ -199,7 +230,7 @@ class BNReasoner:
 
         :param cpts: A dictionary containing all the Dataframes that represent the CPTs.
         :param evidence: A dictionary with the variables and assigned thruth values.
-        :return: A dictionary of all the reduced Dataframes. 
+        :return: A dictionary of all the reduced Dataframes.
         """
         if not evidence:
             return cpts
@@ -250,7 +281,7 @@ class BNReasoner:
             factors_copy, prob = max_out_variable(factors_copy, i)
         sol = factors.loc[factors['p'] == prob]
         for var in sol:
-            if var is not 'p':
+            if var != 'p':
                 result[var] = sol.iloc[0][var]
         return result
 
@@ -280,17 +311,14 @@ def max_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
 
     :param cpt: A Dataframe that contains all the probabilities.
     :param variable: A string with the variable that wants to be reduced.
-    :return: A Dataframe that corresponds to the cpt with the reduced variable. 
+    :return: A Dataframe that corresponds to the cpt with the reduced variable.
     """
-
-    #print(f"Summing out variable {variable} from \n{cpt}")
     res = cpt.copy()
     cols = list(res.columns)
     var_to_remove = cols.index(variable)
     indices_to_drop = []
     sol = None
     for ii, row in res.iterrows():
-        # print("ii, row", ii, row)
         if row[variable] == True:
             opposite_row, index = find_complementary_row(cpt, row, var_to_remove)
             if opposite_row is not None:
@@ -314,6 +342,8 @@ def multiply_factors(factors: List[pd.DataFrame]) -> pd.DataFrame:
     :return: a CPT containing the multiplication result of all CPTs
     """
     res = factors[0]
+    if len(factors) == 1:
+        return res
     for factor in factors[1:]:
         res = res.merge(factor, how="outer")
     res = res.drop(columns=["p"])
@@ -352,8 +382,6 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
     :param variable: The variable that will be removed through summing out
     :return: the new conditional probability table
     """
-
-    # print(f"Summing out variable {variable} from \n{cpt}")
     res = cpt.copy()
     cols = list(res.columns)
     var_to_remove = cols.index(variable)
@@ -367,9 +395,7 @@ def sum_out_variable(cpt: pd.DataFrame, variable: str) -> pd.DataFrame:
     res = res.drop(indices_to_drop)
     res = res.reset_index(drop=True)
     res = res.drop(columns=[variable])
-    # print(f"End result is: \n{res}\n====================================")
     return res
-
 
 def find_complementary_row(cpt: pd.DataFrame, entry_row: pd.Series, index_to_switch: int) -> Tuple[pd.Series, int]:
     """
@@ -401,37 +427,11 @@ def find_complementary_row(cpt: pd.DataFrame, entry_row: pd.Series, index_to_swi
     except:
         return None, None
 
-
-# if __name__ == "__main__":
-#     # bifxml_path = os.getcwd() + "/testing/lecture_example.BIFXML"
-#     bifxml_path = os.getcwd() + "/testing/covid_delta-variant.BIFXML"
-#     bifxml_path = os.getcwd() + "/testing/TC.BIFXML"
-#     bifxml_path = os.getcwd() + "/cancer.BIFXML"
-#     bnr = BNReasoner(bifxml_path)
-#     query = ['V?','H?','HMS?']
-#     query = ['Smoker']
-#     # evidence = {'V?': True, 'H?': True, 'HMS?': True}
-#     evidence = {'Dyspnoea': True, 'Pollution': False}
-#
-#     # evidence = {"Winter?": True}#, "Slippery Road?": False}
-#     # evidence = {}
-#     res = (bnr.marginal_distributions(query, evidence, bnr.min_degree()))
-#     print(res)
-
-
-t2_set = {'/cancer.BIFXML':[['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/child.BIFXML': [['node22', 'node9'],[{'node17': 'state0', 'node5': 'state0'}]], '/hailfinder.BIFXML': [['AMInsWliScen', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/hepar2.BIFXML': [['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/mildew.BIFXML': [['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]]}
-# print(t2_set[list(t2_set.keys())[0]][1][0])
 if __name__ == "__main__":
     bifxml_path = os.getcwd() + r"/testing/X1.BIFXML"
-
-    # bifxml_path = os.getcwd() + "/testing/lecture_example.BIFXML"
     bnr = BNReasoner(bifxml_path)
-    query = ['Sprinkler?', 'Rain?']
-    evidence = {"Winter?": True, 'Sprinkler?': False, 'Rain?': False}#, "Slippery Road?": False}
-    # evidence = {"Winter?": True}#, "Slippery Road?": False}
 
-    # res = (bnr.marginal_distributions(query, evidence, bnr.min_degree()))
-    # print(res)
-print(os.getcwd())
-print(bnr.mpe(t2_set[list(t2_set.keys())[1]][1][0]))
-print(bnr.map(t2_set[list(t2_set.keys())[1]][0], t2_set[list(t2_set.keys())[0]][1][0]))
+    t2_set = {'/cancer.BIFXML':[['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/child.BIFXML': [['node22', 'node9'],[{'node17': 'state0', 'node5': 'state0'}]], '/hailfinder.BIFXML': [['AMInsWliScen', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/hepar2.BIFXML': [['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]], '/mildew.BIFXML': [['Pollution', 'Smoker'],[{'Dyspnoea': True, 'Cancer': False}]]}
+
+    print(bnr.mpe(t2_set[list(t2_set.keys())[1]][1][0]))
+    print(bnr.map(t2_set[list(t2_set.keys())[1]][0], t2_set[list(t2_set.keys())[0]][1][0]))
